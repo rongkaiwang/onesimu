@@ -13,7 +13,7 @@ import core.Settings;
 
 /**
  * A simple Network Interface that provides a constant bit-rate service, where
- * one transmission can be on at a time.
+ * one transmission can be on at a time. 
  */
 public class SimpleBroadcastInterface extends NetworkInterface {
 
