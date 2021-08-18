@@ -103,7 +103,7 @@ MovementModel.warmup = 1000
 ## Map based movement -movement model specific settings
 MapBasedMovement.nrofMapFiles = 1
 
-MapBasedMovement.mapFile1 = data/test2.tosm.wkt
+MapBasedMovement.mapFile1 = data/target1.osm.wkt
 
 ## Reports - all report names have to be valid report classes
 
