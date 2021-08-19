@@ -41,7 +41,7 @@ public class MultiMessageCreateEvent extends MultiMessageEvent{
         destinations.add(to);
         m.setResponseSize(this.responseSize);
         m.updateProperty("destination", destinations);
-        from.createNewMessage(m);//mark add points here
+        from.createNewMultiMessage(m);//mark add points here
     }
 
     @Override

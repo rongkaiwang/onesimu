@@ -229,6 +229,14 @@ public class DTNHost implements Comparable<DTNHost> {
 	}
 
 	/**
+	 * Returns the multi-messages in a collection.
+	 * @return MultiMessages in a collection
+	 */
+	public Collection<MultiMessage> getMultiMessageCollection() {
+		return this.router.getMultiMessageCollection();
+	}
+
+	/**
 	 * Returns the number of messages this node is carrying.
 	 * @return How many messages the node is carrying currently.
 	 */
@@ -502,6 +510,14 @@ public class DTNHost implements Comparable<DTNHost> {
 	}
 
 	/**
+	 * Creates a new multi-message to this host's router
+	 * @param m The multi-message to create
+	 */
+	public void createNewMultiMessage(MultiMessage m) {
+		this.router.createNewMultiMessage(m);
+	}
+
+	/**
 	 * Deletes a message from this host
 	 * @param id Identifier of the message
 	 * @param drop True if the message is deleted because of "dropping"
@@ -511,6 +527,18 @@ public class DTNHost implements Comparable<DTNHost> {
 	 */
 	public void deleteMessage(String id, boolean drop) {
 		this.router.deleteMessage(id, drop);
+	}
+
+	/**
+	 * Deletes a multi-message from this host
+	 * @param id Identifier of the multi-message
+	 * @param drop True if the multi-message is deleted because of "dropping"
+	 * (e.g. buffer is full) or false if it was deleted for some other reason
+	 * (e.g. the multi-message got delivered to final destination). This effects the
+	 * way the removing is reported to the multi-message listeners.
+	 */
+	public void deleteMultiMessage(String id, boolean drop) {
+		this.router.deleteMultiMessage(id, drop);
 	}
 
 	/**

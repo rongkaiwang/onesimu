@@ -11,15 +11,8 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
-import core.Application;
-import core.Connection;
-import core.DTNHost;
-import core.Message;
-import core.MessageListener;
-import core.Settings;
-import core.SettingsError;
-import core.SimClock;
-import core.SimError;
+
+import core.*;
 import routing.util.RoutingInfo;
 import util.Tuple;
 
@@ -85,10 +78,13 @@ public abstract class MessageRouter {
 	public static final int MAX_TTL_VALUE = 35791394;
 
 	private List<MessageListener> mListeners;
+	private List<MultiMessageListener> multiListeners;
 	/** The messages being transferred with msgID_hostName keys */
 	private HashMap<String, Message> incomingMessages;
 	/** The messages this router is carrying */
 	private HashMap<String, Message> messages;
+	/** The multi-messages this router is carrying */
+	private HashMap<String, MultiMessage> multiMessages;
 	/** The messages this router has received as the final recipient */
 	private HashMap<String, Message> deliveredMessages;
 	/** The messages that Applications on this router have blacklisted */
@@ -256,6 +252,18 @@ public abstract class MessageRouter {
 	 */
 	public Collection<Message> getMessageCollection() {
 		return this.messages.values();
+	}
+
+	/**
+	 * Returns a reference to the multi-messages of this router in collection.
+	 * <b>Note:</b> If there's a chance that some multi-message(s) from the collection
+	 * could be deleted (or added) while iterating through the collection, a
+	 * copy of the collection should be made to avoid concurrent modification
+	 * exceptions.
+	 * @return a reference to the multi-messages of this router in collection
+	 */
+	public Collection<MultiMessage> getMultiMessageCollection() {
+		return this.multiMessages.values();
 	}
 
 	/**
@@ -455,12 +463,39 @@ public abstract class MessageRouter {
 	}
 
 	/**
+	 * Adds a message to the message buffer and informs message listeners
+	 * about new message (if requested).
+	 * @param m The message to add
+	 * @param newMessage If true, message listeners are informed about a new
+	 * message, if false, nothing is informed.
+	 */
+	protected void addToMultiMessages(MultiMessage m, boolean newMessage) {
+		this.multiMessages.put(m.getId(), m);
+
+		if (newMessage) {
+			for (MultiMessageListener ml : this.multiListeners) {
+				ml.newMultiMessage(m);
+			}
+		}
+	}
+
+	/**
 	 * Removes and returns a message from the message buffer.
 	 * @param id Identifier of the message to remove
 	 * @return The removed message or null if message for the ID wasn't found
 	 */
 	protected Message removeFromMessages(String id) {
 		Message m = this.messages.remove(id);
+		return m;
+	}
+
+	/**
+	 * Removes and returns a multi-message from the multi-message buffer.
+	 * @param id Identifier of the multi-message to remove
+	 * @return The removed multi-message or null if multi-message for the ID wasn't found
+	 */
+	protected MultiMessage removeFromMultiMessages(String id) {
+		MultiMessage m = this.multiMessages.remove(id);
 		return m;
 	}
 
@@ -497,6 +532,18 @@ public abstract class MessageRouter {
 	}
 
 	/**
+	 * Creates a new multi-message to the router.
+	 * @param m The multi-message to create
+	 * @return True if the creation succeeded, false if not (e.g.
+	 * the message was too big for the buffer)
+	 */
+	public boolean createNewMultiMessage(MultiMessage m) {
+		m.setTtl(this.msgTtl);
+		addToMultiMessages(m, true);
+		return true;
+	}
+
+	/**
 	 * Deletes a message from the buffer and informs message listeners
 	 * about the event
 	 * @param id Identifier of the message to delete
@@ -511,6 +558,24 @@ public abstract class MessageRouter {
 
 		for (MessageListener ml : this.mListeners) {
 			ml.messageDeleted(removed, this.host, drop);
+		}
+	}
+
+	/**
+	 * Deletes a multi-message from the buffer and informs multi-message listeners
+	 * about the event
+	 * @param id Identifier of the multi-message to delete
+	 * @param drop If the multi-message is dropped (e.g. because of full buffer) this
+	 * should be set to true. False value indicates e.g. remove of multi-message
+	 * because it was delivered to final destination.
+	 */
+	public void deleteMultiMessage(String id, boolean drop) {
+		MultiMessage removed = removeFromMultiMessages(id);
+		if (removed == null) throw new SimError("no message for id " +
+				id + " to remove at " + this.host);
+
+		for (MultiMessageListener ml : this.multiListeners) {
+			ml.multiMessageDeleted(removed, this.host, drop);
 		}
 	}
 
