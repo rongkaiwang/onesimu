@@ -3,6 +3,7 @@ package input;
 import core.DTNHost;
 
 import java.util.List;
+import java.util.Set;
 
 public class MultiMessageEvent extends ExternalEvent{
     /** address of the node the message is from */
@@ -12,7 +13,7 @@ public class MultiMessageEvent extends ExternalEvent{
     /** identifier of the message */
     protected String id;
     /** grouplist of the node the message is to */
-    protected List<DTNHost> dest;
+    protected Set<DTNHost> dest;
 
     /**
      * Creates a multi-message  event
@@ -21,7 +22,7 @@ public class MultiMessageEvent extends ExternalEvent{
      * @param id ID of the message
      * @param time Time when the message event occurs
      */
-    public MultiMessageEvent(int from, int to, String id, double time, List<DTNHost> dest) {
+    public MultiMessageEvent(int from, int to, String id, double time, Set<DTNHost> dest) {
         super(time);
         this.fromAddr = from;
         this.toAddr = to;

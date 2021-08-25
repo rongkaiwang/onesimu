@@ -16,7 +16,7 @@ public class MultiMessage extends Message{
     private DTNHost from;
     private DTNHost to;
     /* Destination List of the message */
-    private List<DTNHost> dest;
+    private Set<DTNHost> dest;
     /** Identifier of the message */
     private String id;
     /** Size of the message (bytes) */
@@ -38,7 +38,7 @@ public class MultiMessage extends Message{
      * response message (or 0 if no response is requested) */
     private int responseSize;
     /** if this message is a response message, this is set to the request msg*/
-    private Message requestMsg;
+    private MultiMessage requestMsg;
 
     /** Container for generic message properties. Note that all values
      * stored in the properties should be immutable because only a shallow
@@ -58,7 +58,7 @@ public class MultiMessage extends Message{
      *             will be the same for all replicates of the message)
      * @param size Size of the message (in bytes)
      */
-    public MultiMessage(DTNHost from, DTNHost to, List<DTNHost> dest, String id, int size) {
+    public MultiMessage(DTNHost from, DTNHost to, Set<DTNHost> dest, String id, int size) {
         super(from, to, id, size);
         this.dest = dest;
     }
@@ -229,10 +229,10 @@ public class MultiMessage extends Message{
         return id;
     }
     /**
-     * Returns the node list this message is originally towards
-     * @return the node list this message is originally towards
+     * Returns the node set this message is originally towards
+     * @return the node set this message is originally towards
      */
-    public List<DTNHost> getDest() {return this.dest; }
+    public Set<DTNHost> getDest() {return this.dest; }
 
     /**
      * Deep copies message data from other message. If new fields are

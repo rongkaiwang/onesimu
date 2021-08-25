@@ -7,6 +7,7 @@ import core.World;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class MultiMessageCreateEvent extends MultiMessageEvent{
     private int size;
@@ -21,7 +22,7 @@ public class MultiMessageCreateEvent extends MultiMessageEvent{
      * @param time Time when the message event occurs
      * @param dest grouplist of the node the message is to
      */
-    public MultiMessageCreateEvent(int from, int to, String id, double time, List<DTNHost> dest,
+    public MultiMessageCreateEvent(int from, int to, String id, double time, Set<DTNHost> dest,
                                    int size, int responseSize) {
         super(from, to, id, time, dest);
         this.size = size;
