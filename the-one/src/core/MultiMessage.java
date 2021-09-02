@@ -22,7 +22,9 @@ public class MultiMessage extends Message{
     /** Size of the message (bytes) */
     private int size;
     /** List of nodes this message has passed */
-    private List<DTNHost> path;
+    private List<DTNHost> path; // the path distance is calculated base on this and the spatial distance is calculated by
+    //location. but the nodes are moving so should I add the initial location here?
+    //
     /** Next unique identifier to be given */
     private static int nextUniqueId;
     /** Unique ID of this message */

@@ -35,7 +35,13 @@ public class FirstContactRouter extends ActiveRouter {
 	@Override
 	protected int checkReceiving(Message m, DTNHost from) {
 		int recvCheck = super.checkReceiving(m, from);
-
+// i see, let me note it down yes yes
+		// that is a good idea i think. ok give me a minute to understand it
+		// does that mean that I write an interface between multimessage and the original message
+		// I transfer the multimessage to a message and call the original functions, after receiving the returns
+		// I edit the multimessage and move on
+		// yes
+		// sorry that I forgot to record, ok that is fine
 		if (recvCheck == RCV_OK) {
 			/* don't accept a message that has already traversed this node */
 			if (m.getHops().contains(getHost())) {

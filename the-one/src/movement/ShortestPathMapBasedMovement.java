@@ -61,7 +61,8 @@ public class ShortestPathMapBasedMovement extends MapBasedMovement implements
 		}
 
 		lastMapNode = to;
-
+// all in need is length here
+		//yes that should be my custom report
 		return p;
 	}
 

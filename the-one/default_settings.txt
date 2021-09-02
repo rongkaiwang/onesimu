@@ -88,8 +88,8 @@ Events1.interval = 25,35
 # Message sizes (500kB - 1MB)
 Events1.size = 500k,1M
 # range of message source/destination addresses
-Events1.hosts = 0,5
-Events1.tohosts = 2,4
+Events1.hosts = 0,1 # ok, so then goes to the judgement of the messages' status
+Events1.tohosts = 2,4 #giving the to hosts can set the range of target nodes
 # Message ID prefix
 Events1.prefix = M
 

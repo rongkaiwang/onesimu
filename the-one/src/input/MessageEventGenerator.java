@@ -31,7 +31,8 @@ public class MessageEventGenerator implements EventQueue {
 	 * selected from this range and the source hosts from the
 	 * {@link #HOST_RANGE_S} setting's range.
 	 * The lower bound is inclusive and upper bound exclusive. */
-	public static final String TO_HOST_RANGE_S = "tohosts";
+	public static final String TO_HOST_RANGE_S = "tohosts"; // i remembered that you mentioned here is the range of the
+	// targets
 
 	/** Message ID prefix -setting id ({@value}). The value must be unique
 	 * for all message sources, so if you have more than one message generator,
@@ -85,6 +86,7 @@ public class MessageEventGenerator implements EventQueue {
 		}
 		if (s.contains(TO_HOST_RANGE_S)) {
 			this.toHostRange = s.getCsvInts(TO_HOST_RANGE_S, 2);
+			// I might need to initial the Set<DTNHost> dest for the multimessage here
 		}
 		else {
 			this.toHostRange = null;
@@ -200,7 +202,11 @@ public class MessageEventGenerator implements EventQueue {
 		interval = drawNextEventTimeDiff();
 
 		/* Create event and advance to next event */
-		MessageCreateEvent mce = new MessageCreateEvent(from, to, this.getID(),
+		// comment the original message
+		/* MessageCreateEvent mce = new MessageCreateEvent(from, to, this.getID(),
+				msgSize, responseSize, this.nextEventsTime); */
+
+		MultiMessageCreateEvent mulmce = new MultiMessageCreateEvent(from, to, this.getID(), this.toHostRange,
 				msgSize, responseSize, this.nextEventsTime);
 		this.nextEventsTime += interval;
 
@@ -209,7 +215,7 @@ public class MessageEventGenerator implements EventQueue {
 			this.nextEventsTime = Double.MAX_VALUE;
 		}
 
-		return mce;
+		return mulmce;
 	}
 
 	/**

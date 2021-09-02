@@ -22,9 +22,9 @@ public class MultiMessageCreateEvent extends MultiMessageEvent{
      * @param time Time when the message event occurs
      * @param dest grouplist of the node the message is to
      */
-    public MultiMessageCreateEvent(int from, int to, String id, double time, Set<DTNHost> dest,
-                                   int size, int responseSize) {
-        super(from, to, id, time, dest);
+    public MultiMessageCreateEvent(int from, int to, String id, int[] dest,
+                                   int size, int responseSize, double time) {
+        super(from, to, id, time, dest); // I know what I need to do, I misunderstood sth before.
         this.size = size;
         this.responseSize = size;
     }
@@ -36,8 +36,9 @@ public class MultiMessageCreateEvent extends MultiMessageEvent{
     public void processEvent(World world) {
         DTNHost to = world.getNodeByAddress(this.toAddr);
         DTNHost from = world.getNodeByAddress(this.fromAddr);
+        Set<DTNHost> dest = world.getNodeByAddressRange(this.dest);
 
-        MultiMessage m = new MultiMessage(from, to, this.dest, this.id, this.size);
+        MultiMessage m = new MultiMessage(from, to, dest, this.id, this.size);
         List<DTNHost> destinations = new ArrayList<DTNHost>();
         destinations.add(to);
         m.setResponseSize(this.responseSize);

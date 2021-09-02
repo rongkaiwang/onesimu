@@ -12,6 +12,7 @@ import java.util.Map;
 import core.DTNHost;
 import core.Message;
 import core.MessageListener;
+import core.MultiMessage;
 
 /**
  * Report for generating different kind of total statistics about message
@@ -65,8 +66,31 @@ public class MessageStatsReport extends Report implements MessageListener {
 		this.nrofDelivered = 0;
 	}
 
-
+// take this report for example, the original functions are suitable for Message
+	// I need to change those function in my custom report to be suitable for Muiltimessge.
+	// ok i see
+	// yes it is more clear for me
+	// I see, making comparison between the message and multimessage and describe how I make it
+	// sorry that i have a phone call just now
+	// may I beg your pardon
+	// so I am going to take action, hope that there will be production this week
+	//ok ok thank you~
 	public void messageDeleted(Message m, DTNHost where, boolean dropped) {
+		if (isWarmupID(m.getId())) {
+			return;
+		}
+
+		if (dropped) {
+			this.nrofDropped++;
+		}
+		else {
+			this.nrofRemoved++;
+		}
+
+		this.msgBufferTime.add(getSimTime() - m.getReceiveTime());
+	}
+
+	public void multiMessageDeleted(MultiMessage m, DTNHost where, boolean dropped) {
 		if (isWarmupID(m.getId())) {
 			return;
 		}
@@ -83,6 +107,14 @@ public class MessageStatsReport extends Report implements MessageListener {
 
 
 	public void messageTransferAborted(Message m, DTNHost from, DTNHost to) {
+		if (isWarmupID(m.getId())) {
+			return;
+		}
+
+		this.nrofAborted++;
+	}
+
+	public void multiMessageTransferAborted(MultiMessage m, DTNHost from, DTNHost to) {
 		if (isWarmupID(m.getId())) {
 			return;
 		}
@@ -111,6 +143,26 @@ public class MessageStatsReport extends Report implements MessageListener {
 		}
 	}
 
+	public void multiMessageTransferred(MultiMessage m, DTNHost from, DTNHost to,
+								   		boolean finalTarget) {
+		if (isWarmupID(m.getId())) {
+			return;
+		}
+
+		this.nrofRelayed++;
+		if (finalTarget) {
+			this.latencies.add(getSimTime() -
+					this.creationTimes.get(m.getId()) );
+			this.nrofDelivered++;
+			this.hopCounts.add(m.getHops().size() - 1);
+
+			if (m.isResponse()) {
+				this.rtt.add(getSimTime() -	m.getRequest().getCreationTime());
+				this.nrofResponseDelivered++;
+			}
+		}
+	}
+
 
 	public void newMessage(Message m) {
 		if (isWarmup()) {
@@ -125,8 +177,29 @@ public class MessageStatsReport extends Report implements MessageListener {
 		}
 	}
 
+	public void newMultiMessage(MultiMessage m) {
+		if (isWarmup()) {
+			addWarmupID(m.getId());
+			return;
+		}
+
+		this.creationTimes.put(m.getId(), getSimTime());
+		this.nrofCreated++;
+		if (m.getResponseSize() > 0) {
+			this.nrofResponseReqCreated++;
+		}
+	}
+
 
 	public void messageTransferStarted(Message m, DTNHost from, DTNHost to) {
+		if (isWarmupID(m.getId())) {
+			return;
+		}
+
+		this.nrofStarted++;
+	}
+
+	public void multiMessageTransferStarted(MultiMessage m, DTNHost from, DTNHost to) {
 		if (isWarmupID(m.getId())) {
 			return;
 		}

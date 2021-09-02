@@ -8,10 +8,7 @@ import input.EventQueue;
 import input.ExternalEvent;
 import input.ScheduledUpdatesQueue;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 /**
  * World contains all the nodes and is responsible for updating their
@@ -296,6 +293,28 @@ public class World {
 			"Node " + node + " in index " + address;
 
 		return node;
+	}
+
+	/**
+	 * Returns a set of nodes from the world by their address
+	 * @param address The address range of the node
+	 * @return The requested set of nodes or null if it wasn't found
+	 */
+	public Set<DTNHost> getNodeByAddressRange(int[] address) {
+		if (address[0] < 0 || address[1] >= hosts.size()) {
+			throw new SimError("No host for address " + address[0] + " to " + address[1] + ". Address " +
+					"range of 0-" + (hosts.size()-1) + " is valid");
+		}
+		Set<DTNHost> res = new HashSet<DTNHost>();
+		for (int i = address[0]; i <= address[1]; i++){
+			DTNHost node = this.hosts.get(i);
+			res.add(node);
+		}
+
+		// assert node.getAddress() == address : "Node indexing failed. " +
+		// 		"Node " + node + " in index " + address;
+
+		return res;
 	}
 
 	/**

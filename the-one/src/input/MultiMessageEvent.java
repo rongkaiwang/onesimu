@@ -13,7 +13,7 @@ public class MultiMessageEvent extends ExternalEvent{
     /** identifier of the message */
     protected String id;
     /** grouplist of the node the message is to */
-    protected Set<DTNHost> dest;
+    protected int[] dest;
 
     /**
      * Creates a multi-message  event
@@ -22,7 +22,7 @@ public class MultiMessageEvent extends ExternalEvent{
      * @param id ID of the message
      * @param time Time when the message event occurs
      */
-    public MultiMessageEvent(int from, int to, String id, double time, Set<DTNHost> dest) {
+    public MultiMessageEvent(int from, int to, String id, double time, int[] dest) {
         super(time);
         this.fromAddr = from;
         this.toAddr = to;
