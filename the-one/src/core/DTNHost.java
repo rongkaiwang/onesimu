@@ -32,6 +32,7 @@ public class DTNHost implements Comparable<DTNHost> {
 	private double nextTimeToMove;
 	private String name;
 	private List<MessageListener> msgListeners;
+	private List<MultiMessageListener> mulMsgListeners;
 	private List<MovementListener> movListeners;
 	private List<NetworkInterface> net;
 	private ModuleCommunicationBus comBus;
@@ -132,7 +133,7 @@ public class DTNHost implements Comparable<DTNHost> {
 	 * @param router The router to set
 	 */
 	private void setRouter(MessageRouter router) {
-		router.init(this, msgListeners);
+		router.init(this, msgListeners, mulMsgListeners);
 		this.router = router;
 	}
 
@@ -480,6 +481,17 @@ public class DTNHost implements Comparable<DTNHost> {
 	public boolean requestDeliverableMessages(Connection con) {
 		return this.router.requestDeliverableMessages(con);
 	}
+
+	/**
+	 * Requests for deliverable message from this host to be sent trough a
+	 * connection.
+	 * @param con The connection to send the messages trough
+	 * @return True if this host started a transfer, false if not
+	 */
+	public boolean requestDeliverableMultiMessages(Connection con) {
+		return this.router.requestDeliverableMultiMessages(con);
+	}
+
 
 	/**
 	 * Informs the host that a message was successfully transferred.

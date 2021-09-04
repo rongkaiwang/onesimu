@@ -88,6 +88,18 @@ public abstract class Connection {
 	public abstract int startTransfer(DTNHost from, Message m);
 
 	/**
+	 * Sets a message that this connection is currently transferring. If message
+	 * passing is controlled by external events, this method is not needed
+	 * (but then e.g. {@link #finalizeTransfer()} and
+	 * {@link #isMessageTransferred()} will not work either). Only a one message
+	 * at a time can be transferred using one connection.
+	 * @param m The message
+	 * @return The value returned by
+	 * {@link MessageRouter#receiveMultiMessage(MultiMessage, DTNHost)}
+	 */
+	public abstract int startMultiTransfer(DTNHost from, MultiMessage m);
+
+	/**
 	 * Calculate the current transmission speed from the information
 	 * given by the interfaces, and calculate the missing data amount.
 	 */

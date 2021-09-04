@@ -81,6 +81,8 @@ public abstract class MessageRouter {
 	private List<MultiMessageListener> multiListeners;
 	/** The messages being transferred with msgID_hostName keys */
 	private HashMap<String, Message> incomingMessages;
+	/** The multi-messages being transferred with msgID_hostName keys */
+	private HashMap<String, MultiMessage> incomingMultiMessages;
 	/** The messages this router is carrying */
 	private HashMap<String, Message> messages;
 	/** The multi-messages this router is carrying */
@@ -89,6 +91,10 @@ public abstract class MessageRouter {
 	private HashMap<String, Message> deliveredMessages;
 	/** The messages that Applications on this router have blacklisted */
 	private HashMap<String, Object> blacklistedMessages;
+	/** The multi-messages this router has received as the final recipient */
+	private HashMap<String, MultiMessage> deliveredMultiMessages;
+	/** The multi-messages that Applications on this router have blacklisted */
+	private HashMap<String, Object> blacklistedMultiMessages;
 	/** Host where this router belongs to */
 	private DTNHost host;
 	/** size of the buffer */
@@ -154,12 +160,17 @@ public abstract class MessageRouter {
 	 * @param host The host this router is in
 	 * @param mListeners The message listeners
 	 */
-	public void init(DTNHost host, List<MessageListener> mListeners) {
+	public void init(DTNHost host, List<MessageListener> mListeners, List<MultiMessageListener> multiListeners) {
 		this.incomingMessages = new HashMap<String, Message>();
+		this.incomingMultiMessages = new HashMap<String, MultiMessage>();
 		this.messages = new HashMap<String, Message>();
+		this.multiMessages = new HashMap<String, MultiMessage>();
 		this.deliveredMessages = new HashMap<String, Message>();
+		this.deliveredMultiMessages = new HashMap<String, MultiMessage>();
 		this.blacklistedMessages = new HashMap<String, Object>();
+		this.blacklistedMultiMessages = new HashMap<String, Object>();
 		this.mListeners = mListeners;
+		this.multiListeners = multiListeners;
 		this.host = host;
 	}
 
@@ -209,6 +220,15 @@ public abstract class MessageRouter {
 	}
 
 	/**
+	 * Returns a multi-message by ID.
+	 * @param id ID of the multi-message
+	 * @return The multi-message
+	 */
+	protected MultiMessage getMultiMessage(String id) {
+		return this.multiMessages.get(id);
+	}
+
+	/**
 	 * Checks if this router has a message with certain id buffered.
 	 * @param id Identifier of the message
 	 * @return True if the router has message with this id, false if not
@@ -216,6 +236,16 @@ public abstract class MessageRouter {
 	public boolean hasMessage(String id) {
 		return this.messages.containsKey(id);
 	}
+
+	/**
+	 * Checks if this router has a message with certain id buffered.
+	 * @param id Identifier of the message
+	 * @return True if the router has message with this id, false if not
+	 */
+	public boolean hasMultiMessage(String id) {
+		return this.multiMessages.containsKey(id);
+	}
+
 
 	/**
 	 * Returns true if a full message with same ID as the given message has been
@@ -230,6 +260,18 @@ public abstract class MessageRouter {
 	}
 
 	/**
+	 * Returns true if a full message with same ID as the given message has been
+	 * received by this host as the <strong>final</strong> recipient
+	 * (at least once).
+	 * @param m message we're interested of
+	 * @return true if a message with the same ID has been received by
+	 * this host as the final recipient.
+	 */
+	protected boolean isDeliveredMultiMessage(MultiMessage m) {
+		return (this.deliveredMessages.containsKey(m.getId()));
+	}
+
+	/**
 	 * Returns <code>true</code> if the message has been blacklisted. Messages
 	 * get blacklisted when an application running on the node wants to drop it.
 	 * This ensures the peer doesn't try to constantly send the same message to
@@ -240,6 +282,19 @@ public abstract class MessageRouter {
 	 */
 	protected boolean isBlacklistedMessage(String id) {
 		return this.blacklistedMessages.containsKey(id);
+	}
+
+	/**
+	 * Returns <code>true</code> if the message has been blacklisted. Messages
+	 * get blacklisted when an application running on the node wants to drop it.
+	 * This ensures the peer doesn't try to constantly send the same message to
+	 * this node, just to get dropped by an application every time.
+	 *
+	 * @param id	id of the message
+	 * @return <code>true</code> if blacklisted, <code>false</code> otherwise.
+	 */
+	protected boolean isBlacklistedMultiMessage(String id) {
+		return this.blacklistedMultiMessages.containsKey(id);
 	}
 
 	/**
@@ -272,6 +327,14 @@ public abstract class MessageRouter {
 	 */
 	public int getNrofMessages() {
 		return this.messages.size();
+	}
+
+	/**
+	 * Returns the number of messages this router has
+	 * @return How many messages this router has
+	 */
+	public int getNrofMultiMessages() {
+		return this.multiMessages.size();
 	}
 
 	/**
@@ -337,6 +400,16 @@ public abstract class MessageRouter {
 	}
 
 	/**
+	 * Requests for deliverable multi-message from this router to be sent trough a
+	 * connection.
+	 * @param con The connection to send the messages trough
+	 * @return True if this router started a transfer, false if not
+	 */
+	public boolean requestDeliverableMultiMessages(Connection con) {
+		return false; // default behavior is to not start -- subclasses override
+	}
+
+	/**
 	 * Try to start receiving a message from another host.
 	 * @param m Message to put in the receiving buffer
 	 * @param from Who the message is from
@@ -352,6 +425,27 @@ public abstract class MessageRouter {
 
 		for (MessageListener ml : this.mListeners) {
 			ml.messageTransferStarted(newMessage, from, getHost());
+		}
+
+		return RCV_OK; // superclass always accepts messages
+	}
+
+	/**
+	 * Try to start receiving a message from another host.
+	 * @param m Message to put in the receiving buffer
+	 * @param from Who the message is from
+	 * @return Value zero if the node accepted the message (RCV_OK), value less
+	 * than zero if node rejected the message (e.g. DENIED_OLD), value bigger
+	 * than zero if the other node should try later (e.g. TRY_LATER_BUSY).
+	 */
+	public int receiveMultiMessage(MultiMessage m, DTNHost from) {
+		MultiMessage newMessage = m.replicate();
+
+		this.putToIncomingBuffer(newMessage, from);
+		newMessage.addNodeOnPath(this.host);//what is the action
+
+		for (MultiMessageListener ml : this.multiListeners) {
+			ml.multiMessageTransferStarted(newMessage, from, getHost(), newMessage.getDest());
 		}
 
 		return RCV_OK; // superclass always accepts messages
@@ -415,6 +509,52 @@ public abstract class MessageRouter {
 	}
 
 	/**
+	 * This method should be called (on the receiving host) after a message
+	 * was successfully transferred. The transferred message is put to the
+	 * message buffer unless this host is the final recipient of the message.
+	 * @param id Id of the transferred message
+	 * @param from Host the message was from (previous hop)
+	 * @return The message that this host received
+	 */
+	public MultiMessage multiMessageTransferred(String id, DTNHost from) {
+		MultiMessage incoming = removeMultiFromIncomingBuffer(id, from);
+		boolean isFinalRecipient;
+		boolean isFirstDelivery; // is this first delivered instance of the msg
+
+
+		if (incoming == null) {
+			throw new SimError("No message with ID " + id + " in the incoming "+
+					"buffer of " + this.host);
+		}
+
+		incoming.setReceiveTime(SimClock.getTime());
+
+		// Pass the message to the application (if any) and get outgoing message
+
+		MultiMessage aMessage = incoming;
+		// If the application re-targets the message (changes 'to')
+		// then the message is not considered as 'delivered' to this host.
+		isFinalRecipient = aMessage.getDest() == null;
+		isFirstDelivery = isFinalRecipient &&
+				!isDeliveredMultiMessage(aMessage);
+
+		if (!isFinalRecipient) {
+			// not the final recipient and app doesn't want to drop the message
+			// -> put to buffer
+			addToMultiMessages(aMessage, false);
+		} else if (isFirstDelivery) {
+			this.deliveredMultiMessages.put(id, aMessage);
+		}
+
+		for (MultiMessageListener ml : this.multiListeners) {
+			ml.multiMessageTransferred(aMessage, from, this.host,
+					isFirstDelivery);
+		}
+
+		return aMessage;
+	}
+
+	/**
 	 * Puts a message to incoming messages buffer. Two messages with the
 	 * same ID are distinguished by the from host.
 	 * @param m The message to put
@@ -422,6 +562,16 @@ public abstract class MessageRouter {
 	 */
 	protected void putToIncomingBuffer(Message m, DTNHost from) {
 		this.incomingMessages.put(m.getId() + "_" + from.toString(), m);
+	}
+
+	/**
+	 * Puts a message to incoming messages buffer. Two messages with the
+	 * same ID are distinguished by the from host.
+	 * @param m The message to put
+	 * @param from Who the message was from (previous hop).
+	 */
+	protected void putToMultiIncomingBuffer(MultiMessage m, DTNHost from) {
+		this.incomingMultiMessages.put(m.getId() + "_" + from.toString(), m);
 	}
 
 	/**
@@ -433,6 +583,17 @@ public abstract class MessageRouter {
 	 */
 	protected Message removeFromIncomingBuffer(String id, DTNHost from) {
 		return this.incomingMessages.remove(id + "_" + from.toString());
+	}
+
+	/**
+	 * Removes and returns a message with a certain ID from the incoming
+	 * messages buffer or null if such message wasn't found.
+	 * @param id ID of the message
+	 * @param from The host that sent this message (previous hop)
+	 * @return The found message or null if such message wasn't found
+	 */
+	protected MultiMessage removeMultiFromIncomingBuffer(String id, DTNHost from) {
+		return this.incomingMultiMessages.remove(id + "_" + from.toString());
 	}
 
 	/**
@@ -516,6 +677,26 @@ public abstract class MessageRouter {
 
 		for (MessageListener ml : this.mListeners) {
 			ml.messageTransferAborted(incoming, from, this.host);
+		}
+	}
+
+	/**
+	 * This method should be called (on the receiving host) when a message
+	 * transfer was aborted.
+	 * @param id Id of the message that was being transferred
+	 * @param from Host the message was from (previous hop)
+	 * @param bytesRemaining Nrof bytes that were left before the transfer
+	 * would have been ready; or -1 if the number of bytes is not known
+	 */
+	public void multiMessageAborted(String id, DTNHost from, int bytesRemaining) {
+		MultiMessage incoming = removeMultiFromIncomingBuffer(id, from);
+		if (incoming == null) {
+			throw new SimError("No incoming message for id " + id +
+					" to abort in " + this.host);
+		}
+
+		for (MultiMessageListener ml : this.multiListeners) {
+			ml.multiMessageTransferAborted(incoming, from, this.host, incoming.getDest());
 		}
 	}
 
@@ -681,6 +862,39 @@ public abstract class MessageRouter {
 		}
 
 		for (Message m : this.deliveredMessages.values()) {
+			delivered.addMoreInfo(new RoutingInfo(m + " path:" + m.getHops()));
+		}
+
+		for (Connection c : host.getConnections()) {
+			cons.addMoreInfo(new RoutingInfo(c));
+		}
+
+		return ri;
+	}
+
+	/**
+	 * Returns routing information about this router.
+	 * @return The routing information.
+	 */
+	public RoutingInfo getMultiRoutingInfo() {
+		RoutingInfo ri = new RoutingInfo(this);
+		RoutingInfo incoming = new RoutingInfo(this.incomingMultiMessages.size() +
+				" incoming message(s)");
+		RoutingInfo delivered = new RoutingInfo(this.deliveredMultiMessages.size() +
+				" delivered message(s)");
+
+		RoutingInfo cons = new RoutingInfo(host.getConnections().size() +
+				" connection(s)");
+
+		ri.addMoreInfo(incoming);
+		ri.addMoreInfo(delivered);
+		ri.addMoreInfo(cons);
+
+		for (MultiMessage m : this.incomingMultiMessages.values()) {
+			incoming.addMoreInfo(new RoutingInfo(m));
+		}
+
+		for (MultiMessage m : this.deliveredMultiMessages.values()) {
 			delivered.addMoreInfo(new RoutingInfo(m + " path:" + m.getHops()));
 		}
 

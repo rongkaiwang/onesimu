@@ -10,18 +10,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
+import core.*;
 import routing.util.EnergyModel;
 import routing.util.MessageTransferAcceptPolicy;
 import routing.util.RoutingInfo;
 import util.Tuple;
-
-import core.Connection;
-import core.DTNHost;
-import core.Message;
-import core.MessageListener;
-import core.NetworkInterface;
-import core.Settings;
-import core.SimClock;
 
 /**
  * Superclass of active routers. Contains convenience methods (e.g.
@@ -80,8 +73,8 @@ public abstract class ActiveRouter extends MessageRouter {
 	}
 
 	@Override
-	public void init(DTNHost host, List<MessageListener> mListeners) {
-		super.init(host, mListeners);
+	public void init(DTNHost host, List<MessageListener> mListeners, List<MultiMessageListener> multiListeners) {
+		super.init(host, mListeners, multiListeners);
 		this.sendingConnections = new ArrayList<Connection>(1);
 		this.lastTtlCheck = 0;
 	}
@@ -100,6 +93,27 @@ public abstract class ActiveRouter extends MessageRouter {
 	}
 
 	@Override
+	public boolean requestDeliverableMultiMessages(Connection con) {
+		if (isTransferring()) {
+			return false;
+		}
+
+		DTNHost other = con.getOtherNode(getHost());
+		/* do a copy to avoid concurrent modification exceptions
+		 * (startTransfer may remove messages) */
+		ArrayList<MultiMessage> temp =
+			new ArrayList<MultiMessage>(this.getMultiMessageCollection());
+		for (MultiMessage m : temp) {
+			if (other == m.getTo()) {
+				if (startMultiTransfer(m, con) == RCV_OK) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	@Override
 	public boolean requestDeliverableMessages(Connection con) {
 		if (isTransferring()) {
 			return false;
@@ -109,7 +123,7 @@ public abstract class ActiveRouter extends MessageRouter {
 		/* do a copy to avoid concurrent modification exceptions
 		 * (startTransfer may remove messages) */
 		ArrayList<Message> temp =
-			new ArrayList<Message>(this.getMessageCollection());
+				new ArrayList<Message>(this.getMessageCollection());
 		for (Message m : temp) {
 			if (other == m.getTo()) {
 				if (startTransfer(m, con) == RCV_OK) {
@@ -127,6 +141,12 @@ public abstract class ActiveRouter extends MessageRouter {
 	}
 
 	@Override
+	public boolean createNewMultiMessage(MultiMessage m){
+		makeRoomForNewMessage(m.getSize());
+		return super.createNewMultiMessage(m);
+	}
+
+	@Override
 	public int receiveMessage(Message m, DTNHost from) {
 		int recvCheck = checkReceiving(m, from);
 		if (recvCheck != RCV_OK) {
@@ -135,6 +155,15 @@ public abstract class ActiveRouter extends MessageRouter {
 
 		// seems OK, start receiving the message
 		return super.receiveMessage(m, from);
+	}
+
+	@Override
+	public int receiveMultiMessage(MultiMessage m, DTNHost from){
+		int recvCheck = checkReceiving(m, from);
+		if (recvCheck != RCV_OK){
+			return recvCheck;
+		}
+		return super.receiveMultiMessage(m, from);
 	}
 
 	@Override
@@ -153,6 +182,27 @@ public abstract class ActiveRouter extends MessageRouter {
 					RESPONSE_PREFIX+m.getId(), m.getResponseSize());
 			this.createNewMessage(res);
 			this.getMessage(RESPONSE_PREFIX+m.getId()).setRequest(m);
+		}
+
+		return m;
+	}
+
+	@Override
+	public MultiMessage multiMessageTransferred(String id, DTNHost from) {
+		MultiMessage m = super.multiMessageTransferred(id, from);
+
+		/**
+		 *  N.B. With application support the following if-block
+		 *  becomes obsolete, and the response size should be configured
+		 *  to zero.
+		 */
+		// check if msg was for this host and a response was requested
+		if (m.getTo() == getHost() && m.getResponseSize() > 0) {
+			// generate a response message
+			MultiMessage res = new MultiMessage(m.getFrom(),this.getHost(), m.getDest(),
+					RESPONSE_PREFIX+m.getId(), m.getResponseSize());
+			this.createNewMultiMessage(res);
+			this.getMultiMessage(RESPONSE_PREFIX+m.getId()).setRequest(m);
 		}
 
 		return m;
@@ -194,6 +244,39 @@ public abstract class ActiveRouter extends MessageRouter {
 				m.getTo() == con.getOtherNode(this.getHost())) {
 			/* final recipient has already received the msg -> delete it */
 			this.deleteMessage(m.getId(), false);
+		}
+
+		return retVal;
+	}
+
+	/**
+	 * Tries to start a transfer of multi-message using a connection. Is starting
+	 * succeeds, the connection is added to the watch list of active connections
+	 * @param m The multi-message to transfer
+	 * @param con The connection to use
+	 * @return the value returned by
+	 * {@link Connection#startMultiTransfer(DTNHost, MultiMessage)}
+	 */
+	protected int startMultiTransfer(MultiMessage m, Connection con) {
+		int retVal;
+
+		if (!con.isReadyForTransfer()) {
+			return TRY_LATER_BUSY;
+		}
+
+		if (!policy.acceptSending(getHost(),
+				con.getOtherNode(getHost()), con, m)) {
+			return MessageRouter.DENIED_POLICY;
+		}
+
+		retVal = con.startMultiTransfer(getHost(), m);
+		if (retVal == RCV_OK) { // started transfer
+			addToSendingConnections(con);
+		}
+		else if (deleteDelivered && retVal == DENIED_OLD &&
+				m.getTo() == con.getOtherNode(this.getHost())) {
+			/* final recipient has already received the msg -> delete it */
+			this.deleteMultiMessage(m.getId(), false);
 		}
 
 		return retVal;
@@ -259,6 +342,49 @@ public abstract class ActiveRouter extends MessageRouter {
 	}
 
 	/**
+	 * Checks if router "wants" to start receiving message (i.e. router
+	 * isn't transferring, doesn't have the message and has room for it).
+	 * @param m The message to check
+	 * @return A return code similar to
+	 * {@link MessageRouter#receiveMessage(Message, DTNHost)}, i.e.
+	 * {@link MessageRouter#RCV_OK} if receiving seems to be OK,
+	 * TRY_LATER_BUSY if router is transferring, DENIED_OLD if the router
+	 * is already carrying the message or it has been delivered to
+	 * this router (as final recipient), or DENIED_NO_SPACE if the message
+	 * does not fit into buffer
+	 */
+	protected int checkMultiReceiving(MultiMessage m, DTNHost from) {
+		if (isTransferring()) {
+			return TRY_LATER_BUSY; // only one connection at a time
+		}
+
+		if ( hasMultiMessage(m.getId()) || isDeliveredMultiMessage(m) ||
+				super.isBlacklistedMultiMessage(m.getId())) {
+			return DENIED_OLD; // already seen this message -> reject it
+		}
+
+		if (m.getTtl() <= 0 && m.getTo() != getHost()) {
+			/* TTL has expired and this host is not the final recipient */
+			return DENIED_TTL;
+		}
+
+		if (energy != null && energy.getEnergy() <= 0) {
+			return MessageRouter.DENIED_LOW_RESOURCES;
+		}
+
+		if (!policy.acceptMultiReceiving(from, getHost(), m)) {
+			return MessageRouter.DENIED_POLICY;
+		}
+
+		/* remove oldest messages but not the ones being sent */
+		if (!makeRoomForMultiMessage(m.getSize())) {
+			return DENIED_NO_SPACE; // couldn't fit into buffer -> reject
+		}
+
+		return RCV_OK;
+	}
+
+	/**
 	 * Removes messages from the buffer (oldest first) until
 	 * there's enough space for the new message.
 	 * @param size Size of the new message
@@ -288,6 +414,35 @@ public abstract class ActiveRouter extends MessageRouter {
 	}
 
 	/**
+	 * Removes messages from the buffer (oldest first) until
+	 * there's enough space for the new message.
+	 * @param size Size of the new message
+	 * transferred, the transfer is aborted before message is removed
+	 * @return True if enough space could be freed, false if not
+	 */
+	protected boolean makeRoomForMultiMessage(int size){
+		if (size > this.getBufferSize()) {
+			return false; // message too big for the buffer
+		}
+
+		long freeBuffer = this.getFreeBufferSize();
+		/* delete messages from the buffer until there's enough space */
+		while (freeBuffer < size) {
+			MultiMessage m = getNextMultiMessageToRemove(true); // don't remove msgs being sent
+
+			if (m == null) {
+				return false; // couldn't remove any more messages
+			}
+
+			/* delete multi-message from the buffer as "drop" */
+			deleteMultiMessage(m.getId(), true);
+			freeBuffer += m.getSize();
+		}
+
+		return true;
+	}
+
+	/**
 	 * Drops messages whose TTL is less than zero.
 	 */
 	protected void dropExpiredMessages() {
@@ -296,6 +451,19 @@ public abstract class ActiveRouter extends MessageRouter {
 			int ttl = messages[i].getTtl();
 			if (ttl <= 0) {
 				deleteMessage(messages[i].getId(), true);
+			}
+		}
+	}
+
+	/**
+	 * Drops messages whose TTL is less than zero.
+	 */
+	protected void dropExpiredMultiMessages() {
+		MultiMessage[] multimessages = getMultiMessageCollection().toArray(new MultiMessage[0]);
+		for (int i=0; i<multimessages.length; i++) {
+			int ttl = multimessages[i].getTtl();
+			if (ttl <= 0) {
+				deleteMessage(multimessages[i].getId(), true);
 			}
 		}
 	}
@@ -311,6 +479,16 @@ public abstract class ActiveRouter extends MessageRouter {
 		makeRoomForMessage(size);
 	}
 
+	/**
+	 * Tries to make room for a new multi-message. Current implementation simply
+	 * calls {@link #makeRoomForMessage(int)} and ignores the return value.
+	 * Therefore, if the message can't fit into buffer, the buffer is only
+	 * cleared from messages that are not being sent.
+	 * @param size Size of the new message
+	 */
+	protected void makeRoomForNewMultiMessage(int size) {
+		makeRoomForMessage(size);
+	}
 
 	/**
 	 * Returns the oldest (by receive time) message in the message buffer
@@ -326,6 +504,36 @@ public abstract class ActiveRouter extends MessageRouter {
 		Collection<Message> messages = this.getMessageCollection();
 		Message oldest = null;
 		for (Message m : messages) {
+
+			if (excludeMsgBeingSent && isSending(m.getId())) {
+				continue; // skip the message(s) that router is sending
+			}
+
+			if (oldest == null ) {
+				oldest = m;
+			}
+			else if (oldest.getReceiveTime() > m.getReceiveTime()) {
+				oldest = m;
+			}
+		}
+
+		return oldest;
+	}
+
+	/**
+	 * Returns the oldest (by receive time) message in the message buffer
+	 * (that is not being sent if excludeMsgBeingSent is true).
+	 * @param excludeMsgBeingSent If true, excludes message(s) that are
+	 * being sent from the oldest message check (i.e. if oldest message is
+	 * being sent, the second oldest message is returned)
+	 * @return The oldest message or null if no message could be returned
+	 * (no messages in buffer or all messages in buffer are being sent and
+	 * exludeMsgBeingSent is true)
+	 */
+	protected MultiMessage getNextMultiMessageToRemove(boolean excludeMsgBeingSent) {
+		Collection<MultiMessage> multimessages = this.getMultiMessageCollection();
+		MultiMessage oldest = null;
+		for (MultiMessage m : multimessages) {
 
 			if (excludeMsgBeingSent && isSending(m.getId())) {
 				continue; // skip the message(s) that router is sending
@@ -368,6 +576,31 @@ public abstract class ActiveRouter extends MessageRouter {
 	}
 
 	/**
+	 * Returns a list of message-connections tuples of the messages whose
+	 * recipient is some host that we're connected to at the moment.
+	 * @return a list of message-connections tuples
+	 */
+	protected List<Tuple<MultiMessage, Connection>> getMultiMessagesForConnected() {
+		if (getNrofMultiMessages() == 0 || getConnections().size() == 0) {
+			/* no messages -> empty list */
+			return new ArrayList<Tuple<MultiMessage, Connection>>(0);
+		}
+
+		List<Tuple<MultiMessage, Connection>> forTuples =
+				new ArrayList<Tuple<MultiMessage, Connection>>();
+		for (MultiMessage m : getMultiMessageCollection()) {
+			for (Connection con : getConnections()) {
+				DTNHost to = con.getOtherNode(getHost());
+				if (m.getTo() == to) {
+					forTuples.add(new Tuple<MultiMessage, Connection>(m,con));
+				}
+			}
+		}
+
+		return forTuples;
+	}
+
+	/**
 	 * Tries to send messages for the connections that are mentioned
 	 * in the Tuples in the order they are in the list until one of
 	 * the connections starts transferring or all tuples have been tried.
@@ -392,6 +625,31 @@ public abstract class ActiveRouter extends MessageRouter {
 		return null;
 	}
 
+	/**
+	 * Tries to send messages for the connections that are mentioned
+	 * in the Tuples in the order they are in the list until one of
+	 * the connections starts transferring or all tuples have been tried.
+	 * @param tuples The tuples to try
+	 * @return The tuple whose connection accepted the message or null if
+	 * none of the connections accepted the message that was meant for them.
+	 */
+	protected Tuple<MultiMessage, Connection> tryMultiMessagesForConnected(
+			List<Tuple<MultiMessage, Connection>> tuples) {
+		if (tuples.size() == 0) {
+			return null;
+		}
+
+		for (Tuple<MultiMessage, Connection> t : tuples) {
+			MultiMessage m = t.getKey();
+			Connection con = t.getValue();
+			if (startMultiTransfer(m, con) == RCV_OK) {
+				return t;
+			}
+		}
+
+		return null;
+	}
+
 	 /**
 	  * Goes trough the messages until the other node accepts one
 	  * for receiving (or doesn't accept any). If a transfer is started, the
@@ -404,6 +662,29 @@ public abstract class ActiveRouter extends MessageRouter {
 	protected Message tryAllMessages(Connection con, List<Message> messages) {
 		for (Message m : messages) {
 			int retVal = startTransfer(m, con);
+			if (retVal == RCV_OK) {
+				return m;	// accepted a message, don't try others
+			}
+			else if (retVal > 0) {
+				return null; // should try later -> don't bother trying others
+			}
+		}
+
+		return null; // no message was accepted
+	}
+
+	/**
+	 * Goes trough the messages until the other node accepts one
+	 * for receiving (or doesn't accept any). If a transfer is started, the
+	 * connection is included in the list of sending connections.
+	 * @param con Connection trough which the messages are sent
+	 * @param messages A list of messages to try
+	 * @return The message whose transfer was started or null if no
+	 * transfer was started.
+	 */
+	protected MultiMessage tryAllMultiMessages(Connection con, List<MultiMessage> messages) {
+		for (MultiMessage m : messages) {
+			int retVal = startMultiTransfer(m, con);
 			if (retVal == RCV_OK) {
 				return m;	// accepted a message, don't try others
 			}
@@ -440,6 +721,30 @@ public abstract class ActiveRouter extends MessageRouter {
 	}
 
 	/**
+	 * Tries to send all given messages to all given connections. Connections
+	 * are first iterated in the order they are in the list and for every
+	 * connection, the messages are tried in the order they are in the list.
+	 * Once an accepting connection is found, no other connections or messages
+	 * are tried.
+	 * @param messages The list of Messages to try
+	 * @param connections The list of Connections to try
+	 * @return The connections that started a transfer or null if no connection
+	 * accepted a message.
+	 */
+	protected Connection tryMultiMessagesToConnections(List<MultiMessage> messages,
+												  	   List<Connection> connections) {
+		for (int i=0, n=connections.size(); i<n; i++) {
+			Connection con = connections.get(i);
+			MultiMessage started = tryAllMultiMessages(con, messages);
+			if (started != null) {
+				return con;
+			}
+		}
+
+		return null;
+	}
+
+	/**
 	 * Tries to send all messages that this router is carrying to all
 	 * connections this node has. Messages are ordered using the
 	 * {@link MessageRouter#sortByQueueMode(List)}. See
@@ -458,6 +763,27 @@ public abstract class ActiveRouter extends MessageRouter {
 		this.sortByQueueMode(messages);
 
 		return tryMessagesToConnections(messages, connections);
+	}
+
+	/**
+	 * Tries to send all messages that this router is carrying to all
+	 * connections this node has. Messages are ordered using the
+	 * {@link MessageRouter#sortByQueueMode(List)}. See
+	 * {@link #tryMessagesToConnections(List, List)} for sending details.
+	 * @return The connections that started a transfer or null if no connection
+	 * accepted a message.
+	 */
+	protected Connection tryAllMultiMessagesToAllConnections(){
+		List<Connection> connections = getConnections();
+		if (connections.size() == 0 || this.getNrofMultiMessages() == 0) {
+			return null;
+		}
+
+		List<MultiMessage> messages =
+				new ArrayList<MultiMessage>(this.getMultiMessageCollection());
+		this.sortByQueueMode(messages);
+
+		return tryMultiMessagesToConnections(messages, connections);
 	}
 
 	/**

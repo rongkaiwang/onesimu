@@ -6,15 +6,9 @@ package routing.util;
 
 import java.util.ArrayList;
 
+import core.*;
 import util.Range;
 import util.Tuple;
-
-import core.ArithmeticCondition;
-import core.Connection;
-import core.DTNHost;
-import core.Message;
-import core.ModuleCommunicationBus;
-import core.Settings;
 
 /**
  * <P> Message transfer accepting policy module. Can be used to decide whether
@@ -267,6 +261,22 @@ public class MessageTransferAcceptPolicy {
 	}
 
 	/**
+	 * Checks the given messages hop count against the given policy arithmetic
+	 * condition
+	 * @param m The message whose hop count is checked
+	 * @param ac The policy arithmetic condition
+	 * @return True if the condition is null or the hop count matches to the
+	 * condition, false otherwise
+	 */
+	private boolean checkMultiHopCountPolicy(MultiMessage m, ArithmeticCondition ac) {
+		if (ac == null) {
+			return true;
+		} else {
+			return ac.isTrueFor(m.getHopCount());
+		}
+	}
+
+	/**
 	 * Returns true if the given message, using the given connection, is OK
 	 * to send from "from" to "to" host.
 	 * @param from The sending host
@@ -316,6 +326,33 @@ public class MessageTransferAcceptPolicy {
 
 		if (m.getTo() != to &&
 				!checkHopCountPolicy(m, this.hopCountReceivePolicy)) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Returns true if the given message is OK to receive from "from" to
+	 * "to" host.
+	 * @param from The sending host
+	 * @param to The receiving host
+	 * @param m The message to transfer
+	 * @return True if the message is OK to transfer, false is not
+	 */
+	public boolean acceptMultiReceiving(DTNHost from, DTNHost to, MultiMessage m) {
+		if (! checkMcbConditions(to.getComBus(), true)) {
+			return false;
+		}
+
+		int myAddr = to.getAddress();
+		if (! (checkSimplePolicy(m.getTo(), this.toReceivePolicy,myAddr) &&
+				checkSimplePolicy(m.getFrom(), this.fromReceivePolicy, myAddr)) ) {
+			return false;
+		}
+
+		if (m.getTo() != to &&
+				!checkMultiHopCountPolicy(m, this.hopCountReceivePolicy)) {
 			return false;
 		}
 

@@ -1,6 +1,7 @@
 package core;
 
 import java.util.List;
+import java.util.Set;
 
 public interface MultiMessageListener {
 
@@ -17,7 +18,7 @@ public interface MultiMessageListener {
      * @param to Node where the multi-message is transferred to
      * @param dest list of nodes where the multi-message will be transfer to
      */
-    public void multiMessageTransferStarted(MultiMessage m, DTNHost from, DTNHost to, List<DTNHost> dest);
+    public void multiMessageTransferStarted(MultiMessage m, DTNHost from, DTNHost to, Set<DTNHost> dest);
 
     /**
      * Method is called when a multi-message is deleted
@@ -35,7 +36,7 @@ public interface MultiMessageListener {
      * @param to Node where the multi-message was being transferred to
      * @param dest list of nodes where the multi-message would be transfer to
      */
-    public void multiMessageTransferAborted(MultiMessage m, DTNHost from, DTNHost to, List<DTNHost> dest);
+    public void multiMessageTransferAborted(MultiMessage m, DTNHost from, DTNHost to, Set<DTNHost> dest);
 
     /**
      * Method is called when a multi-message is successfully transferred from
