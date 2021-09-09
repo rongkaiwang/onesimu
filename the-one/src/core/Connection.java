@@ -18,6 +18,7 @@ public abstract class Connection {
 
 	private boolean isUp;
 	protected Message msgOnFly;
+	protected MultiMessage mulMsgOnFly;
 	/** how many bytes this connection has transferred */
 	protected int bytesTransferred;
 
@@ -53,7 +54,7 @@ public abstract class Connection {
 	 * @return true if the connections is transferring a message
 	 */
 	public boolean isTransferring() {
-		return this.msgOnFly != null;
+		return (this.msgOnFly != null || this.mulMsgOnFly != null);
 	}
 
 
@@ -120,6 +121,20 @@ public abstract class Connection {
 	}
 
 	/**
+	 * Aborts the transfer of the currently transferred multi-message.
+	 */
+	public void abortMultiTransfer() {
+		assert mulMsgOnFly != null : "No message to abort at " + msgFromNode;
+		int bytesRemaining = getRemainingByteCount();
+
+		this.bytesTransferred += mulMsgOnFly.getSize() - bytesRemaining;
+
+		getOtherNode(msgFromNode).messageAborted(this.mulMsgOnFly.getId(),
+				msgFromNode, bytesRemaining);
+		clearMsgOnFly();
+	}
+
+	/**
 	 * Returns the amount of bytes to be transferred before ongoing transfer
 	 * is ready or 0 if there's no ongoing transfer or it has finished
 	 * already
@@ -134,6 +149,7 @@ public abstract class Connection {
 	protected void clearMsgOnFly() {
 		this.msgOnFly = null;
 		this.msgFromNode = null;
+		this.mulMsgOnFly = null;
 	}
 
 	/**
@@ -154,10 +170,33 @@ public abstract class Connection {
 	}
 
 	/**
+	 * Finalizes the transfer of the currently transferred message.
+	 * The message that was being transferred can <STRONG>not</STRONG> be
+	 * retrieved from this connections after calling this method (using
+	 * {@link #getMessage()}).
+	 */
+	public void finalizeMultiTransfer() {
+		assert this.mulMsgOnFly != null : "Nothing to finalize in " + this;
+		assert msgFromNode != null : "msgFromNode is not set";
+
+		this.bytesTransferred += mulMsgOnFly.getSize();
+
+		getOtherNode(msgFromNode).messageTransferred(this.mulMsgOnFly.getId(),
+				msgFromNode);
+		clearMsgOnFly();
+	}
+
+	/**
 	 * Returns true if the current message transfer is done
 	 * @return True if the transfer is done, false if not
 	 */
 	public abstract boolean isMessageTransferred();
+
+	/**
+	 * Returns true if the current multi-message transfer is done
+	 * @return True if the transfer is done, false if not
+	 */
+	public abstract boolean isMultiMessageTransferred();
 
 	/**
 	 * Returns true if the connection is ready to transfer a message (connection
@@ -176,6 +215,10 @@ public abstract class Connection {
 		return this.msgOnFly;
 	}
 
+	public MultiMessage getMultiMessage() {
+		return this.mulMsgOnFly;
+	}
+
 	/**
 	 * Gets the current connection speed
 	 */
@@ -186,16 +229,19 @@ public abstract class Connection {
 	 * (including all transfers).
 	 */
 	public int getTotalBytesTransferred() {
-		if (this.msgOnFly == null) {
+		if (this.msgOnFly == null || this.mulMsgOnFly == null) {
 			return this.bytesTransferred;
 		}
 		else {
 			if (isMessageTransferred()) {
 				return this.bytesTransferred + this.msgOnFly.getSize();
 			}
+			else if (isMultiMessageTransferred()){
+				return this.bytesTransferred + this.mulMsgOnFly.getSize();
+			}
 			else {
 				return this.bytesTransferred +
-				(msgOnFly.getSize() - getRemainingByteCount());
+				(msgOnFly.getSize() + mulMsgOnFly.getSize()- getRemainingByteCount());
 			}
 		}
 	}

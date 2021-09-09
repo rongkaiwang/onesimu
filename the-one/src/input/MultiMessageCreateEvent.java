@@ -38,7 +38,7 @@ public class MultiMessageCreateEvent extends MultiMessageEvent{
         DTNHost from = world.getNodeByAddress(this.fromAddr);
         Set<DTNHost> dest = world.getNodeByAddressRange(this.dest);
 
-        MultiMessage m = new MultiMessage(from, to, dest, this.id, this.size);
+        MultiMessage m = new MultiMessage(from, to, dest, this.id, this.size, from.getLocation());
         List<DTNHost> destinations = new ArrayList<DTNHost>();
         destinations.add(to);
         m.setResponseSize(this.responseSize);

@@ -159,7 +159,7 @@ public abstract class ActiveRouter extends MessageRouter {
 
 	@Override
 	public int receiveMultiMessage(MultiMessage m, DTNHost from){
-		int recvCheck = checkReceiving(m, from);
+		int recvCheck = checkMultiReceiving(m, from);
 		if (recvCheck != RCV_OK){
 			return recvCheck;
 		}
@@ -200,7 +200,7 @@ public abstract class ActiveRouter extends MessageRouter {
 		if (m.getTo() == getHost() && m.getResponseSize() > 0) {
 			// generate a response message
 			MultiMessage res = new MultiMessage(m.getFrom(),this.getHost(), m.getDest(),
-					RESPONSE_PREFIX+m.getId(), m.getResponseSize());
+					RESPONSE_PREFIX+m.getId(), m.getResponseSize(), m.getFrom().getLocation());
 			this.createNewMultiMessage(res);
 			this.getMultiMessage(RESPONSE_PREFIX+m.getId()).setRequest(m);
 		}
@@ -476,17 +476,6 @@ public abstract class ActiveRouter extends MessageRouter {
 	 * @param size Size of the new message
 	 */
 	protected void makeRoomForNewMessage(int size) {
-		makeRoomForMessage(size);
-	}
-
-	/**
-	 * Tries to make room for a new multi-message. Current implementation simply
-	 * calls {@link #makeRoomForMessage(int)} and ignores the return value.
-	 * Therefore, if the message can't fit into buffer, the buffer is only
-	 * cleared from messages that are not being sent.
-	 * @param size Size of the new message
-	 */
-	protected void makeRoomForNewMultiMessage(int size) {
 		makeRoomForMessage(size);
 	}
 
@@ -819,7 +808,38 @@ public abstract class ActiveRouter extends MessageRouter {
 		return null;
 	}
 
+	/**
+	 * Exchanges deliverable (to final recipient) messages between this host
+	 * and all hosts this host is currently connected to. First all messages
+	 * from this host are checked and then all other hosts are asked for
+	 * messages to this host. If a transfer is started, the search ends.
+	 * @return A connection that started a transfer or null if no transfer
+	 * was started
+	 */
+	protected Connection exchangeDeliverableMultiMessages() {
+		List<Connection> connections = getConnections();
 
+		if (connections.size() == 0) {
+			return null;
+		}
+
+		@SuppressWarnings(value = "unchecked")
+		Tuple<MultiMessage, Connection> t =
+				tryMultiMessagesForConnected(sortByQueueMode(getMultiMessagesForConnected()));
+
+		if (t != null) {
+			return t.getValue(); // started transfer
+		}
+
+		// didn't start transfer to any node -> ask messages from connected
+		for (Connection con : connections) {
+			if (con.getOtherNode(getHost()).requestDeliverableMultiMessages(con)) {
+				return con;
+			}
+		}
+
+		return null;
+	}
 
 	/**
 	 * Shuffles a messages list so the messages are in random order.
@@ -878,10 +898,10 @@ public abstract class ActiveRouter extends MessageRouter {
 	 */
 	public boolean isSending(String msgId) {
 		for (Connection con : this.sendingConnections) {
-			if (con.getMessage() == null) {
+			if (con.getMessage() == null && con.getMultiMessage() == null) {
 				continue; // transmission is finalized
 			}
-			if (con.getMessage().getId().equals(msgId)) {
+			if (con.getMessage().getId().equals(msgId) || con.getMultiMessage().getId().equals(msgId)) {
 				return true;
 			}
 		}
@@ -921,11 +941,19 @@ public abstract class ActiveRouter extends MessageRouter {
 				} /* else: some other entity aborted transfer */
 				removeCurrent = true;
 			}
+			if (con.isMultiMessageTransferred()){
+				if (con.getMultiMessage() != null) {
+					transferDone(con);
+					con.finalizeMultiTransfer();
+				} /* else: some other entity aborted transfer */
+				removeCurrent = true;
+			}
 			/* remove connections that have gone down */
 			else if (!con.isUp()) {
-				if (con.getMessage() != null) {
+				if (con.getMessage() != null || con.getMultiMessage() != null) {
 					transferAborted(con);
 					con.abortTransfer();
+					con.abortMultiTransfer();
 				}
 				removeCurrent = true;
 			}
@@ -933,7 +961,12 @@ public abstract class ActiveRouter extends MessageRouter {
 			if (removeCurrent) {
 				// if the message being sent was holding excess buffer, free it
 				if (this.getFreeBufferSize() < 0) {
-					this.makeRoomForMessage(0);
+					if (con.getMultiMessage() != null){
+						this.makeRoomForMultiMessage(0);
+					}
+					else {
+						this.makeRoomForMessage(0);
+					}
 				}
 				sendingConnections.remove(i);
 			}
@@ -947,6 +980,7 @@ public abstract class ActiveRouter extends MessageRouter {
 		if (SimClock.getTime() - lastTtlCheck >= TTL_CHECK_INTERVAL &&
 				sendingConnections.size() == 0) {
 			dropExpiredMessages();
+			dropExpiredMultiMessages();
 			lastTtlCheck = SimClock.getTime();
 		}
 

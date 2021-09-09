@@ -61,6 +61,26 @@ public class CBRConnection extends Connection {
 		return retVal;
 	}
 
+	@Override
+	public int startMultiTransfer(DTNHost from, MultiMessage m) {
+		assert this.mulMsgOnFly == null : "Already transferring " +
+				this.mulMsgOnFly + " from " + this.msgFromNode + " to " +
+				this.getOtherNode(this.msgFromNode) + ". Can't " +
+				"start transfer of " + m + " from " + from;
+
+		this.msgFromNode = from;
+		MultiMessage newMessage = m.replicate();
+		int retVal = getOtherNode(from).receiveMessage(newMessage, from);
+
+		if (retVal == MessageRouter.RCV_OK) {
+			this.mulMsgOnFly = newMessage;
+			this.transferDoneTime = SimClock.getTime() +
+					(1.0*m.getSize()) / this.speed;
+		}
+
+		return retVal;
+	}
+
 	/**
 	 * Aborts the transfer of the currently transferred message.
 	 */
@@ -85,6 +105,11 @@ public class CBRConnection extends Connection {
 	 */
 	public boolean isMessageTransferred() {
 		return getRemainingByteCount() == 0;
+	}
+
+	@Override
+	public boolean isMultiMessageTransferred() {
+		return false;
 	}
 
 	/**

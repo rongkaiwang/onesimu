@@ -7,6 +7,7 @@ import core.World;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class MultiMessageDeleteEvent extends MultiMessageEvent {
 
@@ -46,7 +47,7 @@ public class MultiMessageDeleteEvent extends MultiMessageEvent {
      * @param time Time when the message event occurs
      * @param dest
      */
-    public MultiMessageDeleteEvent(int from, int to, String id, double time, List<DTNHost> dest) {
+    public MultiMessageDeleteEvent(int from, int to, String id, double time, int[] dest) {
         super(from, to, id, time, dest);
     }
 }

@@ -24,7 +24,8 @@ public class MultiMessage extends Message{
     /** List of nodes this message has passed */
     private List<DTNHost> path; // the path distance is calculated base on this and the spatial distance is calculated by
     //location. but the nodes are moving so should I add the initial location here?
-    //
+    /** initial location of the message **/
+    private Coord location;
     /** Next unique identifier to be given */
     private static int nextUniqueId;
     /** Unique ID of this message */
@@ -48,7 +49,7 @@ public class MultiMessage extends Message{
     private Map<String, Object> properties;
 
     /** Application ID of the application that created the message */
-    private String	appID;
+    private String appID;
 
     /**
      * Creates a new Message.
@@ -60,9 +61,10 @@ public class MultiMessage extends Message{
      *             will be the same for all replicates of the message)
      * @param size Size of the message (in bytes)
      */
-    public MultiMessage(DTNHost from, DTNHost to, Set<DTNHost> dest, String id, int size) {
+    public MultiMessage(DTNHost from, DTNHost to, Set<DTNHost> dest, String id, int size, Coord location) {
         super(from, to, id, size);
         this.dest = dest;
+        this.location = location;
     }
     /**
      * Returns the node this message is originally from
@@ -287,7 +289,7 @@ public class MultiMessage extends Message{
      * @return A replicate of the multi-message
      */
     public MultiMessage replicate() {
-        MultiMessage m = new MultiMessage(from, to, dest, id, size);
+        MultiMessage m = new MultiMessage(from, to, dest, id, size, location);
         m.copyFrom(this);
         return m;
     }

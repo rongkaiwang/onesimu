@@ -61,6 +61,26 @@ public class VBRConnection extends Connection {
 		return retVal;
 	}
 
+	@Override
+	public int startMultiTransfer(DTNHost from, MultiMessage m) {
+		assert this.mulMsgOnFly == null : "Already transferring " +
+				this.mulMsgOnFly + " from " + this.msgFromNode + " to " +
+				this.getOtherNode(this.msgFromNode) + ". Can't "+
+				"start transfer of " + m + " from " + from;
+
+		this.msgFromNode = from;
+		MultiMessage newMessage = m.replicate();
+		int retVal = getOtherNode(from).receiveMessage(newMessage, from);
+
+		if (retVal == MessageRouter.RCV_OK) {
+			this.mulMsgOnFly = newMessage;
+			this.msgsize = m.getSize();
+			this.msgsent = 0;
+		}
+
+		return retVal;
+	}
+
 	/**
 	 * Calculate the current transmission speed from the information
 	 * given by the interfaces, and calculate the missing data amount.
@@ -108,6 +128,11 @@ public class VBRConnection extends Connection {
 		} else {
 			return false;
 		}
+	}
+
+	@Override
+	public boolean isMultiMessageTransferred() {
+		return false;
 	}
 
 }

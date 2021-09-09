@@ -31,8 +31,7 @@ public class MessageEventGenerator implements EventQueue {
 	 * selected from this range and the source hosts from the
 	 * {@link #HOST_RANGE_S} setting's range.
 	 * The lower bound is inclusive and upper bound exclusive. */
-	public static final String TO_HOST_RANGE_S = "tohosts"; // i remembered that you mentioned here is the range of the
-	// targets
+	public static final String TO_HOST_RANGE_S = "tohosts";
 
 	/** Message ID prefix -setting id ({@value}). The value must be unique
 	 * for all message sources, so if you have more than one message generator,
